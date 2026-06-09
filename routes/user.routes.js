@@ -49,10 +49,11 @@ const signToken = (user) =>
 
 // ─── Helper: Set token cookie ─────────────────────────────────────────────────
 const setTokenCookie = (res, token) => {
+  const isProd = process.env.NODE_ENV === 'production';
   res.cookie('token', token, {
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
     expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days
   });
 };
@@ -186,10 +187,12 @@ router.get('/check-auth', (req, res) => {
 // POST /api/logout
 // ════════════════════════════════════════════════════════════════════════════
 router.post('/logout', (req, res) => {
+  const isProd = process.env.NODE_ENV === 'production';
   res.cookie('token', '', {
     httpOnly: true,
     expires: new Date(0),
-    sameSite: 'lax',
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
   });
   res.status(200).json({ message: 'Logged out successfully' });
 });

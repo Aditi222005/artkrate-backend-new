@@ -31,10 +31,11 @@ router.post('/admin/login', async (req, res) => {
       { expiresIn: '3d' }
     );
 
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('adminToken', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure:   false,
+      sameSite: isProd ? 'none' : 'lax',
+      secure:   isProd,
       expires:  new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
     });
 
@@ -53,7 +54,13 @@ router.post('/admin/login', async (req, res) => {
 // POST /api/admin/logout
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/logout', (req, res) => {
-  res.cookie('adminToken', '', { httpOnly: true, expires: new Date(0) });
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie('adminToken', '', {
+    httpOnly: true,
+    expires: new Date(0),
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
+  });
   res.status(200).json({ message: 'Admin logged out successfully' });
 });
 
