@@ -20,6 +20,8 @@ const paymentRoutes = require('./routes/payment.routes');
 const activityRoutes = require('./routes/activity.routes');
 const sellerRoutes = require('./routes/seller.routes');
 const aiRoutes = require('./routes/ai.routes');
+const messageRoutes = require('./routes/message.routes');
+const { initRedis } = require('./utils/redisClient');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -53,9 +55,9 @@ const globalLimiter = rateLimit({
 });
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 30 * 1000,
   max: 20,
-  message: { message: 'Too many login attempts. Please try again in 15 minutes.' },
+  message: { message: 'Too many login attempts. Please try again in 30 seconds.' },
 });
 
 app.use(globalLimiter);
@@ -97,7 +99,9 @@ app.use(cookieParser());
 
 
 // ─── Database ─────────────────────────────────────────────────────────────────
+// Connect Database & Services
 connectDB();
+initRedis();
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api', authLimiter, userRoutes);        // Auth: login, signup, logout, /me
 app.use('/api', adminRoutes);
@@ -111,6 +115,7 @@ app.use('/api/payment', paymentRoutes);          // Razorpay payment + webhook
 app.use('/api/activity', activityRoutes);        // User activity feed
 app.use('/api/seller', sellerRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/messages', messageRoutes);
 
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

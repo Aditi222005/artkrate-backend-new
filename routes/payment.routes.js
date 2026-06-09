@@ -44,7 +44,7 @@ router.post('/create-order', auth, async (req, res) => {
     const options = {
       amount: amountInPaise,
       currency: 'INR',
-      receipt: `rcpt_${Date.now()}_${req.user._id}`,
+      receipt: `rcpt_${Date.now()}_${req.user._id.toString().slice(-6)}`,
       notes: {
         buyerId: req.user._id.toString(),
         artworkIds: cartItems.join(','),
@@ -66,7 +66,12 @@ router.post('/create-order', auth, async (req, res) => {
     });
   } catch (err) {
     console.error('Razorpay create-order error:', err);
-    res.status(500).json({ message: 'Failed to create payment order', error: err.message });
+    const errorDetails = err.error?.description || err.description || err.message || String(err);
+    res.status(500).json({ 
+      message: 'Failed to create payment order', 
+      error: errorDetails,
+      rawError: err
+    });
   }
 });
 
@@ -225,6 +230,79 @@ router.post('/webhook', async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────────
 router.get('/key', auth, (req, res) => {
   res.status(200).json({ keyId: process.env.RAZORPAY_KEY_ID });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// POST /api/payment/cod
+// Creates a Cash On Delivery (COD) order in the DB
+// ────────────────────────────────────────────────────────────────────────────────
+router.post('/cod', auth, async (req, res) => {
+  try {
+    const { cartItems } = req.body;
+
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+      return res.status(400).json({ message: 'Cart items are required' });
+    }
+
+    const buyerId = req.user._id;
+    const createdOrders = [];
+
+    for (const artworkId of cartItems) {
+      const artwork = await SellerPost.findById(artworkId);
+      if (!artwork) {
+        return res.status(404).json({ message: `Artwork ${artworkId} not found` });
+      }
+
+      // Generate a mock unique COD order/payment reference
+      const codRef = `cod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+      const order = new Order({
+        buyerId,
+        sellerId: artwork.sellerId,
+        artworkId: artwork._id,
+        artworkTitle: artwork.title,
+        price: artwork.price,
+        status: 'Pending',
+        paymentMethod: 'cod',
+        paymentId: codRef,
+        paymentDetails: {
+          paymentStatus: 'unpaid',
+          invoiceNumber: `INV-${Date.now()}-${req.user._id.toString().slice(-4)}`
+        }
+      });
+
+      await order.save();
+      createdOrders.push(order);
+
+      // Activity: seller gets a sale event
+      logActivity({
+        userId: artwork.sellerId,
+        type: 'artwork_sold',
+        title: 'Artwork order placed (COD)',
+        detail: `"${artwork.title}" was ordered via COD`,
+        artworkId: artwork._id,
+        relatedUserId: buyerId,
+      });
+
+      // Activity: buyer gets a purchase event
+      logActivity({
+        userId: buyerId,
+        type: 'artwork_purchased',
+        title: 'Artwork ordered (COD)',
+        detail: `You placed a COD order for "${artwork.title}"`,
+        artworkId: artwork._id,
+        relatedUserId: artwork.sellerId,
+      });
+    }
+
+    res.status(201).json({
+      message: 'COD orders placed successfully',
+      orders: createdOrders,
+    });
+  } catch (err) {
+    console.error('COD order creation error:', err);
+    res.status(500).json({ message: 'Failed to place COD order', error: err.message });
+  }
 });
 
 module.exports = router;

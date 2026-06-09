@@ -47,6 +47,12 @@ const orderSchema = new mongoose.Schema(
       default: 'Pending',
       index: true,
     },
+    paymentMethod: {
+      type: String,
+      enum: ['razorpay', 'cod'],
+      default: 'razorpay',
+      index: true,
+    },
     // Razorpay flat fields (backward compatible)
     razorpayOrderId: {
       type: String,

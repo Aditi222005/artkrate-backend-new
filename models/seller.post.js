@@ -18,10 +18,6 @@ const sellerPostSchema = new mongoose.Schema({
         ref: 'users',
         required: true,
     },
-    profileImage: {  // changed from profileImage -> profileImage (string)
-        type: [String],
-        required: true,
-    },
     views: { type: Number, default: 0 },
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "users" }],
     salePrice: { type: Number },

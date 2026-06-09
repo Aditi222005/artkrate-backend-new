@@ -11,6 +11,8 @@ const path = require('path');
 const axios = require('axios');
 const FormData = require('form-data');
 
+const AI_SERVER_URL = process.env.AI_SERVER_URL || 'http://localhost:3000';
+
 let canvas = null;
 let faceapi = null;
 let modulesLoaded = false;
@@ -113,7 +115,7 @@ const compareFaces = async (selfieBuffer, documentBuffer) => {
     form.append('document', documentBuffer, { filename: 'document.jpg', contentType: 'image/jpeg' });
 
     console.log('🔄 Calling Python Face Match Service (Gemini 1.5 Flash)...');
-    const response = await axios.post('http://localhost:3000/api/compare-faces', form, {
+    const response = await axios.post(`${AI_SERVER_URL}/api/compare-faces`, form, {
       headers: form.getHeaders(),
       maxBodyLength: Infinity,
       timeout: 25000, // 25s timeout
