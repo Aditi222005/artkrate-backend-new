@@ -187,27 +187,39 @@ const callGeminiCompareFaces = async (selfieBuffer, documentBuffer) => {
  * }>}
  */
 const compareFaces = async (selfieBuffer, documentBuffer) => {
-  // ── Try calling Gemini Vision API directly from Node ─────
+  // ── Try calling the Python AI Service on Railway ──────────
   try {
-    console.log('🔄 Calling Gemini 2.5 Flash API directly from Node backend for face comparison...');
-    const result = await callGeminiCompareFaces(selfieBuffer, documentBuffer);
+    console.log(`🔄 Proxying Face Similarity to Python AI Server: ${AI_SERVER_URL}/api/compare-faces`);
+    
+    const form = new FormData();
+    form.append('selfie', selfieBuffer, { filename: 'selfie.jpg', contentType: 'image/jpeg' });
+    form.append('document', documentBuffer, { filename: 'document.jpg', contentType: 'image/jpeg' });
 
-    const score = result.score !== undefined ? result.score : 0;
-    const level = result.level || "low";
-    const matched = result.matched !== undefined ? result.matched : false;
-    const remarks = result.remarks || "";
+    const response = await axios.post(`${AI_SERVER_URL}/api/compare-faces`, form, {
+      headers: form.getHeaders(),
+      timeout: 30000
+    });
 
-    console.log(`✅ Gemini face match complete — score: ${score}/100, level: ${level}, remarks: ${remarks}`);
-    return {
-      score,
-      level,
-      matched,
-      distance: matched ? 0.2 : 0.8, // placeholder distance compatible with database
-      remarks,
-      skipped: false,
-    };
+    if (response.data && response.data.success) {
+      const result = response.data;
+      const score = result.score !== undefined ? result.score : 0;
+      const level = result.level || "low";
+      const matched = result.matched !== undefined ? result.matched : false;
+      const remarks = result.remarks || "";
+
+      console.log(`✅ Railway face match complete — score: ${score}/100, level: ${level}, remarks: ${remarks}`);
+      return {
+        score,
+        level,
+        matched,
+        distance: matched ? 0.2 : 0.8, // placeholder distance compatible with database
+        remarks,
+        skipped: false,
+      };
+    }
+    throw new Error((response.data && response.data.error) || "Failed match request");
   } catch (pyErr) {
-    console.warn(`⚠️ Direct Gemini Face Match failed (${pyErr.message}). Falling back to local face-api.js...`);
+    console.warn(`⚠️ Railway Face Match failed (${pyErr.message}). Falling back to local face-api.js...`);
   }
 
   // ── Fallback: Local face-api.js ───────────────────────────────────────────
