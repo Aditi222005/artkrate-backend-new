@@ -107,36 +107,107 @@ const distanceToScore = (distance) => {
  *   error?:   string
  * }>}
  */
-const compareFaces = async (selfieBuffer, documentBuffer) => {
-  // ── Try calling the Python face match service first (Gemini 1.5 Flash) ─────
-  try {
-    const form = new FormData();
-    form.append('selfie', selfieBuffer, { filename: 'selfie.jpg', contentType: 'image/jpeg' });
-    form.append('document', documentBuffer, { filename: 'document.jpg', contentType: 'image/jpeg' });
+const callGeminiCompareFaces = async (selfieBuffer, documentBuffer) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is not configured.");
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-    console.log('🔄 Calling Python Face Match Service (Gemini 1.5 Flash)...');
-    const response = await axios.post(`${AI_SERVER_URL}/api/compare-faces`, form, {
-      headers: form.getHeaders(),
-      maxBodyLength: Infinity,
-      timeout: 25000, // 25s timeout
-    });
+  const prompt =
+    "You are an expert biometric verification system.\n" +
+    "Analyze the two provided images:\n" +
+    "1. The first image is a selfie of the seller.\n" +
+    "2. The second image is a photo from their government-issued identity document.\n\n" +
+    "Perform the following checks:\n" +
+    "1. Check if a human face is clearly present in both images.\n" +
+    "2. Compare the facial features in both images to determine if they belong to the same person.\n" +
+    "3. Calculate a similarity score between 0 and 100 based on facial structures (ignore age differences, facial hair, glasses, hairstyles, lighting, and photo quality/graininess).\n" +
+    "4. Determine the confidence level of the comparison: 'high', 'medium', or 'low'.\n" +
+    "5. Provide a brief remark/reason for your decision.\n\n" +
+    "You must respond ONLY with a valid JSON object. Do not include any markdown formatting or backticks.\n" +
+    "JSON format:\n" +
+    "{\n" +
+    "  \"face1_present\": true,\n" +
+    "  \"face2_present\": true,\n" +
+    "  \"matched\": true,\n" +
+    "  \"score\": 85,\n" +
+    "  \"level\": \"high\",\n" +
+    "  \"remarks\": \"description of match details\"\n" +
+    "}";
 
-    if (response.data && response.data.success) {
-      const { score, level, matched, remarks } = response.data;
-      console.log(`✅ Python face match complete — score: ${score}/100, level: ${level}, remarks: ${remarks}`);
-      return {
-        score,
-        level,
-        matched,
-        distance: matched ? 0.2 : 0.8, // placeholder distance compatible with database
-        remarks,
-        skipped: false,
-      };
-    } else {
-      console.warn('⚠️ Python Face Match Service returned success: false. Falling back to local face-api.js...');
+  const contents = [{
+    parts: [
+      { text: prompt },
+      {
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: selfieBuffer.toString('base64')
+        }
+      },
+      {
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: documentBuffer.toString('base64')
+        }
+      }
+    ]
+  }];
+
+  const response = await axios.post(url, { contents }, {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 30000
+  });
+
+  if (response.data && response.data.candidates && response.data.candidates[0] && response.data.candidates[0].content && response.data.candidates[0].content.parts && response.data.candidates[0].content.parts[0]) {
+    let textResponse = response.data.candidates[0].content.parts[0].text.trim();
+    if (textResponse.startsWith("```")) {
+      const lines = textResponse.split('\n');
+      if (lines[0].startsWith("```json") || lines[0].startsWith("```")) {
+        textResponse = lines.slice(1, -1).join('\n').trim();
+      }
     }
+    return JSON.parse(textResponse);
+  }
+  throw new Error("Invalid response from Gemini API");
+};
+
+/**
+ * Compare two image Buffers (selfie vs document photo).
+ *
+ * @param {Buffer} selfieBuffer
+ * @param {Buffer} documentBuffer
+ * @returns {Promise<{
+ *   score:    number,
+ *   level:    'high'|'medium'|'low',
+ *   matched:  boolean,
+ *   distance: number,
+ *   skipped?: boolean,
+ *   error?:   string
+ * }>}
+ */
+const compareFaces = async (selfieBuffer, documentBuffer) => {
+  // ── Try calling Gemini Vision API directly from Node ─────
+  try {
+    console.log('🔄 Calling Gemini 2.5 Flash API directly from Node backend for face comparison...');
+    const result = await callGeminiCompareFaces(selfieBuffer, documentBuffer);
+
+    const score = result.score !== undefined ? result.score : 0;
+    const level = result.level || "low";
+    const matched = result.matched !== undefined ? result.matched : false;
+    const remarks = result.remarks || "";
+
+    console.log(`✅ Gemini face match complete — score: ${score}/100, level: ${level}, remarks: ${remarks}`);
+    return {
+      score,
+      level,
+      matched,
+      distance: matched ? 0.2 : 0.8, // placeholder distance compatible with database
+      remarks,
+      skipped: false,
+    };
   } catch (pyErr) {
-    console.warn(`⚠️ Python Face Match Service failed (${pyErr.message}). Falling back to local face-api.js...`);
+    console.warn(`⚠️ Direct Gemini Face Match failed (${pyErr.message}). Falling back to local face-api.js...`);
   }
 
   // ── Fallback: Local face-api.js ───────────────────────────────────────────
