@@ -1,0 +1,16 @@
+# Ignore Python files to prevent Vercel from auto-detecting/building Python serverless functions
+venv/
+ai_analyzer.py
+test_ai.py
+requirements.txt
+Dockerfile.ai
+
+# Ignore local test scripts and temp files
+test_kyc_encryption.js
+test_local_chatbox.js
+test_payment.js
+test_artwork.png
+
+# Ignore docker files
+Dockerfile
+.dockerignore
