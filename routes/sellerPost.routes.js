@@ -1,4 +1,5 @@
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const router = express.Router();
 const SellerPost = require("../models/seller.post");
 const cloudinary = require("../utils/cloudinary");
@@ -146,9 +147,18 @@ router.get("/all", async (req, res) => {
   }
 });
 
-router.get("/artists", auth, async (req, res) => {
+router.get("/artists", async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    let currentUserId = null;
+    const token = req.cookies?.token || req.header("Authorization")?.replace("Bearer ", "");
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        currentUserId = decoded.id;
+      } catch (err) {
+        // Ignore invalid tokens for public browsing
+      }
+    }
 
     const posts = await SellerPost.find().populate({
       path: "sellerId",
@@ -160,11 +170,13 @@ router.get("/artists", auth, async (req, res) => {
 
     posts.forEach((post) => {
       const seller = post.sellerId;
+      if (!seller) return; // Guard if seller user was deleted
+      
       const sellerId = seller._id.toString();
 
       if (!artistMap.has(sellerId)) {
-        const isFollowing = seller.followers?.some(
-          (followerId) => followerId.toString() === currentUserId
+        const isFollowing = currentUserId && seller.followers?.some(
+          (followerId) => followerId.toString() === currentUserId.toString()
         );
 
         artistMap.set(sellerId, {
@@ -172,13 +184,13 @@ router.get("/artists", auth, async (req, res) => {
           name: seller.name,
           avatar:
             seller.profilePhoto ||
-            `https://source.unsplash.com/150x150/?portrait,artist,${seller.name}`,
+            `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(seller.name)}`,
           location: seller.address || seller.country || "Unknown",
           specialty: post.category || "Mixed Media",
           coverImage: post.images?.[0] || null,
           artworksCount: 1,
           followersCount: seller.followers?.length || 0,
-          isFollowing,
+          isFollowing: !!isFollowing,
           rating: (Math.random() * 1.5 + 3.5).toFixed(1),
           bio:
             seller.bio ||
