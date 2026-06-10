@@ -96,6 +96,16 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
 
+// ─── Detailed Request Logging for Vercel ──────────────────────────────────────
+app.use((req, res, next) => {
+  console.log(`📥 [API REQUEST] ${req.method} ${req.originalUrl}`, {
+    headers: req.headers,
+    query: req.query,
+    body: req.method !== 'GET' ? req.body : undefined,
+  });
+  next();
+});
+
 // ─── Body Parsing ─────────────────────────────────────────────────────────────
 // IMPORTANT: Raw body for Razorpay webhooks MUST come before express.json()
 app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
@@ -145,12 +155,16 @@ app.use((req, res) => {
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
+  console.error(`❌ [API ERROR] ${req.method} ${req.originalUrl} — Status: ${err.status || 500} — Message: ${err.message || err}`);
+  if (err.stack) {
+    console.error('Stack Trace:', err.stack);
+  }
+
   // Don't log CORS errors verbosely in production
   if (err.message?.startsWith('CORS blocked')) {
     return res.status(403).json({ message: err.message });
   }
 
-  console.error('Unhandled error:', err.message || err);
   res.status(err.status || 500).json({
     message: err.message || 'Internal server error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
