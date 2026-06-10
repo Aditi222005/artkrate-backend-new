@@ -116,7 +116,14 @@ app.use(cookieParser());
 
 // ─── Database ─────────────────────────────────────────────────────────────────
 // Connect Database & Services
-connectDB();
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ message: "Database connection failed", error: err.message });
+  }
+});
 initRedis();
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api', authLimiter, userRoutes);        // Auth: login, signup, logout, /me
